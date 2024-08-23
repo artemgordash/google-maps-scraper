@@ -15,11 +15,18 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
-    "@emotion/react": "^11.13.0",
+    "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
+    "@mui/icons-material": "^5.16.7",
     "@mui/joy": "^5.0.0-beta.48",
+    "@mui/material": "^5.16.7",
+    "@universe/address-parser": "^3.3.0",
+    "addresser": "^1.1.20",
+    "json-2-csv": "^5.5.5",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.1",
+    "use-count-up": "^3.0.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
