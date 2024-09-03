@@ -1,4 +1,8 @@
-import { waitForTabIdle } from '@/helpers/wait-for-tab-idle';
+import {
+  getPlaceDetails,
+  getPlacesIdByQuery,
+  searchForPlaces,
+} from '@/helpers/googlemaps';
 import { DownloadRounded } from '@mui/icons-material';
 import {
   Box,
@@ -8,141 +12,22 @@ import {
   Modal,
   ModalClose,
   ModalDialog,
+  CircularProgress,
 } from '@mui/joy';
-import { csv2json, json2csv } from 'json-2-csv';
-import { browser } from 'wxt/browser';
+import { json2csv } from 'json-2-csv';
+import _, { chunk } from 'lodash';
 
 export const Intro = () => {
-  const [url, setUrl] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [query, setQuery] = useState('');
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
-  const [links, setLinks] = useState<any[]>([]);
   const [scraped, setScraped] = useState<any[]>([]);
   const [filename, setFilename] = useState('');
   const [fileData, setFileData] = useState<any[]>([]);
   const [openModal, setOpenModal] = useState(false);
-  const urlQuery = url.split('/').at(-3)?.split('+').join(' ');
-  const [tabs, setTabs] = useState<number[]>([]);
-
-  useEffect(() => {
-    const scrapeThemAll = async () => {
-      for (const link of links) {
-        const details = await getCompanyDetails(link);
-        console.log('🚀 ~ scrapeThemAll ~ details:', details);
-        setScraped((prev) => {
-          const nextValue = [...prev, details];
-          console.log('🚀 ~ setScraped ~ nextValue.length:', nextValue.length);
-          if (nextValue.length === links.length) {
-            setLoading(false);
-            browser.notifications.create({
-              iconUrl: './icon/128.png',
-              message: 'Export available for download.',
-              type: 'basic',
-              title: 'Scraping Complete',
-            });
-          }
-          return nextValue;
-        });
-      }
-    };
-
-    scrapeThemAll();
-  }, [links]);
-
-  const getCompanyDetails = async (url: string) => {
-    const finalData: { [k: string]: any } = {};
-    const googleMapsTab = await browser.tabs.create({
-      pinned: true,
-      active: false,
-      url,
-    });
-    setTabs((prev) => [...prev, googleMapsTab.id!]);
-    try {
-      await waitForTabIdle(googleMapsTab.id!);
-      const data = await browser.scripting.executeScript({
-        target: { tabId: googleMapsTab.id! },
-        files: ['scrape-details.js'],
-      });
-      finalData.details = data[0].result;
-    } catch (e) {
-      console.log('Google Maps details fails');
-    } finally {
-      await browser.tabs.remove(googleMapsTab.id!);
-    }
-
-    if (finalData.details?.website) {
-      const websiteTab = await browser.tabs.create({
-        url: finalData.details.website,
-        active: false,
-        pinned: true,
-      });
-      setTabs((prev) => [...prev, websiteTab.id!]);
-      try {
-        await waitForTabIdle(websiteTab.id!);
-        const websiteData = await browser.scripting.executeScript({
-          target: { tabId: websiteTab.id! },
-          files: ['scrape-website.js'],
-        });
-        finalData.socialMedias = websiteData[0].result;
-      } catch (e) {
-        console.error('Failed to scrape social medias');
-      } finally {
-        await browser.tabs.remove(websiteTab.id!);
-      }
-    }
-
-    return {
-      Company: finalData.details?.company,
-      Category: finalData.details?.category,
-      Description: finalData.socialMedias?.Description,
-      Website: finalData.details?.website,
-      Address: finalData.details?.address,
-      City: finalData.details?.city,
-      State: finalData.details?.state,
-      Country: finalData.details?.country,
-      'Postal Code': finalData.details?.postalCode,
-      'Phone Number': finalData.details?.phoneNumber,
-      ...finalData.details?.workingHours,
-      Instagram: finalData.socialMedias?.Instagram,
-      Twitter: finalData.socialMedias?.Twitter,
-      Facebook: finalData.socialMedias?.Facebook,
-      Linkedin: finalData.socialMedias?.Linkedin,
-      Youtube: finalData.socialMedias?.Youtube,
-      Tiktok: finalData.socialMedias?.Tiktok,
-      'Google Maps Url': url,
-    };
-  };
-
-  const getCompaniesList = async () => {
-    setLoading(true);
-    const tab = await browser.tabs.create({
-      pinned: true,
-      active: false,
-      url: `${url}&hl=en`,
-    });
-
-    setTabs((prev) => [...prev, tab.id!]);
-
-    await waitForTabIdle(tab.id!);
-
-    new Promise((resolve, reject) =>
-      setTimeout(() => {
-        reject('Timeout exceed');
-        browser.tabs.remove(tab.id!);
-        getCompaniesList();
-      }, 120000)
-    );
-
-    const data = await browser.scripting.executeScript({
-      target: { tabId: tab.id! },
-      files: ['scrape-list.js'],
-    });
-    const links = data[0].result;
-    console.log('🚀 ~ getCompaniesList ~ links:', links);
-    setLinks(links);
-    await browser.tabs.remove(tab.id!);
-  };
+  const urlQuery = query.split('/').at(-3)?.split('+').join(' ');
+  const [location, setLocation] = useState<string>('');
+  const [tournamentName, setTournamentName] = useState<string>('');
 
   const sheetStyle = {
     minWidth: 400,
@@ -166,7 +51,7 @@ export const Intro = () => {
     const a = document.createElement('a');
     a.setAttribute('hidden', '');
     a.setAttribute('href', url);
-    a.setAttribute('download', `${filename}.csv`);
+    a.setAttribute('download', `${tournamentName}-${new Date().getFullYear()}`);
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -174,25 +59,48 @@ export const Intro = () => {
 
   const resetAll = () => {
     setLoading(false);
-    setLinks([]);
     setScraped([]);
     setFileData([]);
-    setUrl('');
+    setQuery('');
     setFilename('');
-    setFile(null);
     setOpenModal(false);
+    setLocation('');
+    setTournamentName('');
+  };
 
-    tabs.forEach((id) => {
-      console.log('🚀 ~ tabs.forEach ~ id:', id);
-      try {
-        browser.tabs.remove(id).then(console.log);
-      } catch (error) {
-        console.error('Failed to remove tab', error);
-      }
+  const showFinishNotification = async () =>
+    await browser.notifications.create({
+      type: 'basic',
+      iconUrl: 'icon/96.png',
+      title: 'Export available',
+      message: `${tournamentName}-${new Date().getFullYear()}`,
     });
 
-    setTabs([]);
-  };
+  async function onReadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files?.length) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const text = reader.result as string;
+        const data = _.uniqBy(text.split('\n').filter(Boolean), (v) => v);
+        console.log('🚀 ~ reader.onload= ~ data:', data);
+
+        if (!data.length) throw new Error('No data found');
+
+        setFileData(data);
+        setOpenModal(true);
+      } catch (error) {
+        alert(
+          'Failed to read the file, ensure the file is a text file and companies are separated by new lines'
+        );
+      }
+    };
+
+    reader.readAsText(e.target.files[0]);
+
+    e.target.value = '';
+  }
 
   return (
     <Box
@@ -212,10 +120,12 @@ export const Intro = () => {
         <ModalDialog>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <Typography>Companies: {fileData.length}</Typography>
+            <Typography>{tournamentName}</Typography>
+            <Typography>{location}</Typography>
           </Box>
           <Box sx={{ minWidth: 500, mt: 2, overflow: 'auto' }}>
             <ModalClose />
-            {fileData.map((d, i) => (
+            {fileData.map((company, i) => (
               <Box
                 key={i}
                 sx={{
@@ -226,52 +136,99 @@ export const Intro = () => {
                   justifyContent: 'space-between',
                 }}
               >
-                <Typography key={i}>{d.Company}</Typography>
-                <Typography level={'body-sm'} color={'neutral'} key={i}>
-                  {d.City}
-                </Typography>
+                <Typography key={i}>{company}</Typography>
               </Box>
             ))}
           </Box>
           <Button
-            onClick={() => {
-              setLinks(
-                fileData.map(
-                  (d) =>
-                    `http://maps.google.com/?q=${d.Company}+${d.City}+${d.Address}`
-                )
-              );
+            sx={{ mt: 3 }}
+            disabled={!location}
+            onClick={async () => {
+              setLoading(true);
+              for (const company of fileData) {
+                const places = await searchForPlaces(`${company} ${location}`);
+                const ids = places?.slice(0, 3).map((e) => e.place_id);
+
+                const chunks = chunk(ids, 2);
+                const results: any = [];
+
+                for (const chunk of chunks) {
+                  await Promise.all(
+                    chunk!.map(async (id) => {
+                      const data = await getPlaceDetails(id!, tournamentName);
+                      results.push(data);
+                      return data;
+                    })
+                  );
+                }
+
+                setScraped((scraped) => [...scraped, ...results]);
+              }
+              await showFinishNotification();
+              setLoading(false);
               setOpenModal(false);
             }}
           >
-            SCRAPE THEM ALL!!!
+            {loading ? <CircularProgress /> : 'scrape them all'}
           </Button>
         </ModalDialog>
       </Modal>
       <Box sx={sheetStyle}>
         <Typography textAlign={'center'}>{urlQuery || filename}</Typography>
         <Input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder='Google Maps URL'
+          value={tournamentName}
+          onChange={(e) => setTournamentName(e.target.value)}
+          placeholder='Tournament name, ex: Las Vegas Pizza'
         />
-        {!(scraped.length === links.length && scraped.length !== 0) && (
+        <Input
+          value={location}
+          onChange={(e) => {
+            setLocation(e.target.value);
+          }}
+          placeholder={'Location, ex: Las Vegas'}
+        />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder='Search query, ex: Top restaurants'
+        />
+        {!scraped.length && (
           <>
-            <Button disabled={!url} onClick={getCompaniesList}>
-              {loading
-                ? `${
-                    links.length ? `${scraped.length} / ${links.length} - ` : ''
-                  } Scraping...`
-                : 'Get businesses'}
-            </Button>
-            {loading && (
-              <Button color={'danger'} onClick={resetAll}>
-                Stop
+            {loading ? (
+              <CircularProgress sx={{ mx: 'auto' }} />
+            ) : (
+              <Button
+                disabled={!query || loading}
+                onClick={async () => {
+                  setLoading(true);
+                  const ids = await getPlacesIdByQuery(`${query} ${location}`);
+                  const results = [];
+                  for (const id of ids!) {
+                    const data = await getPlaceDetails(id!, tournamentName);
+                    results.push(data);
+                  }
+                  setScraped(results);
+                  setLoading(false);
+                  await showFinishNotification();
+                }}
+              >
+                Get businesses by search query
               </Button>
             )}
           </>
         )}
-        {!!links.length && scraped.length === links.length && (
+        {!scraped.length && (
+          <Button
+            type={'file'}
+            variant={'outlined'}
+            disabled={!location || !tournamentName}
+            // @ts-ignore
+            onClick={() => fileInputRef!.current!.click()}
+          >
+            Get businesses from a text file
+          </Button>
+        )}
+        {!!scraped.length && (
           <>
             <Button
               onClick={downloadCompaniesFile}
@@ -285,50 +242,13 @@ export const Intro = () => {
             </Button>
           </>
         )}
-        <Typography sx={{ mx: 'auto' }}>or</Typography>
-        <Button
-          type={'file'}
-          variant={'outlined'}
-          // @ts-ignore
-          onClick={() => fileInputRef!.current!.click()}
-        >
-          Get businesses from a CSV file
-        </Button>
         <input
-          onChange={async (e) => {
-            if (!e.target.files?.length) return;
-
-            const reader = new FileReader();
-            reader.onload = async () => {
-              const text = reader.result;
-              const json = csv2json(text as string) as {
-                Company: string;
-                City: string;
-                State: string;
-              }[];
-
-              setFileData(json);
-              setOpenModal(true);
-            };
-
-            reader.readAsText(e.target.files[0]);
-
-            e.target.value = '';
-          }}
-          accept='.csv, .json'
+          onChange={onReadFile}
+          accept='.txt'
           ref={fileInputRef}
           hidden
           type={'file'}
         />
-        <Typography
-          component={'a'}
-          textAlign={'center'}
-          href={'https://cloudconvert.com'}
-          target={'_blank'}
-          level={'body-sm'}
-        >
-          Convert any file to CSV
-        </Typography>
       </Box>
     </Box>
   );
