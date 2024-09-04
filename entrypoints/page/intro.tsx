@@ -1,8 +1,4 @@
-import {
-  getPlaceDetails,
-  getPlacesIdByQuery,
-  searchForPlaces,
-} from '@/helpers/googlemaps';
+import { searchByCompanyName, searchByQuery } from '@/helpers/googlemaps';
 import { DownloadRounded } from '@mui/icons-material';
 import {
   Box,
@@ -15,10 +11,10 @@ import {
   CircularProgress,
 } from '@mui/joy';
 import { json2csv } from 'json-2-csv';
-import _, { chunk } from 'lodash';
+import _ from 'lodash';
 
 export const Intro = () => {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState('Top restaurants');
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [scraped, setScraped] = useState<any[]>([]);
@@ -26,8 +22,8 @@ export const Intro = () => {
   const [fileData, setFileData] = useState<any[]>([]);
   const [openModal, setOpenModal] = useState(false);
   const urlQuery = query.split('/').at(-3)?.split('+').join(' ');
-  const [location, setLocation] = useState<string>('');
-  const [tournamentName, setTournamentName] = useState<string>('');
+  const [location, setLocation] = useState<string>('Nashville');
+  const [tournamentName, setTournamentName] = useState<string>('Test tour');
 
   const sheetStyle = {
     minWidth: 400,
@@ -67,6 +63,14 @@ export const Intro = () => {
     setLocation('');
     setTournamentName('');
   };
+
+  const showErrorNotification = async (message: string) =>
+    await browser.notifications.create({
+      type: 'basic',
+      iconUrl: 'icon/96.png',
+      title: 'Error',
+      message: `Something went wrong: ${message}`,
+    });
 
   const showFinishNotification = async () =>
     await browser.notifications.create({
@@ -144,29 +148,24 @@ export const Intro = () => {
             sx={{ mt: 3 }}
             disabled={!location}
             onClick={async () => {
-              setLoading(true);
-              for (const company of fileData) {
-                const places = await searchForPlaces(`${company} ${location}`);
-                const ids = places?.slice(0, 3).map((e) => e.place_id);
-
-                const chunks = chunk(ids, 2);
-                const results: any = [];
-
-                for (const chunk of chunks) {
-                  await Promise.all(
-                    chunk!.map(async (id) => {
-                      const data = await getPlaceDetails(id!, tournamentName);
-                      results.push(data);
-                      return data;
-                    })
-                  );
+              try {
+                setLoading(true);
+                setOpenModal(false);
+                const data = await searchByCompanyName(
+                  fileData,
+                  location,
+                  tournamentName
+                );
+                setScraped(data);
+                await showFinishNotification();
+              } catch (error) {
+                console.log('🚀 ~ onClick={ ~ error:', error);
+                if (error instanceof Error) {
+                  await showErrorNotification(error.message);
                 }
-
-                setScraped((scraped) => [...scraped, ...results]);
+              } finally {
+                setLoading(false);
               }
-              await showFinishNotification();
-              setLoading(false);
-              setOpenModal(false);
             }}
           >
             {loading ? <CircularProgress /> : 'scrape them all'}
@@ -200,16 +199,23 @@ export const Intro = () => {
               <Button
                 disabled={!query || loading}
                 onClick={async () => {
-                  setLoading(true);
-                  const ids = await getPlacesIdByQuery(`${query} ${location}`);
-                  const results = [];
-                  for (const id of ids!) {
-                    const data = await getPlaceDetails(id!, tournamentName);
-                    results.push(data);
+                  try {
+                    setLoading(true);
+                    const data = await searchByQuery(
+                      `${query} in ${location}`,
+                      tournamentName
+                    );
+                    setScraped(data);
+                    console.log('🚀 ~ onClick={ ~ data:', data);
+                    setLoading(false);
+                    await showFinishNotification();
+                  } catch (error) {
+                    if (error instanceof Error) {
+                      await showErrorNotification(error.message);
+                    }
+                  } finally {
+                    setLoading(false);
                   }
-                  setScraped(results);
-                  setLoading(false);
-                  await showFinishNotification();
                 }}
               >
                 Get businesses by search query
@@ -221,7 +227,7 @@ export const Intro = () => {
           <Button
             type={'file'}
             variant={'outlined'}
-            disabled={!location || !tournamentName}
+            disabled={!location || !tournamentName || loading}
             // @ts-ignore
             onClick={() => fileInputRef!.current!.click()}
           >

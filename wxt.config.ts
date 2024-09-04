@@ -22,6 +22,7 @@ export default defineConfig({
       'storage',
       'webNavigation',
       'notifications',
+      'debugger',
     ],
   },
 });
