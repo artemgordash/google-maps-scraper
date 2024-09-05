@@ -14,7 +14,7 @@ import { json2csv } from 'json-2-csv';
 import _ from 'lodash';
 
 export const Intro = () => {
-  const [query, setQuery] = useState('Top restaurants');
+  const [query, setQuery] = useState('');
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [scraped, setScraped] = useState<any[]>([]);
@@ -22,8 +22,8 @@ export const Intro = () => {
   const [fileData, setFileData] = useState<any[]>([]);
   const [openModal, setOpenModal] = useState(false);
   const urlQuery = query.split('/').at(-3)?.split('+').join(' ');
-  const [location, setLocation] = useState<string>('Nashville');
-  const [tournamentName, setTournamentName] = useState<string>('Test tour');
+  const [location, setLocation] = useState<string>('');
+  const [tournamentName, setTournamentName] = useState<string>('');
 
   const sheetStyle = {
     minWidth: 400,
