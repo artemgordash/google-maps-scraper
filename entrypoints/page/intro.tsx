@@ -22,8 +22,8 @@ export const Intro = () => {
   const [fileData, setFileData] = useState<any[]>([]);
   const [openModal, setOpenModal] = useState(false);
   const urlQuery = query.split('/').at(-3)?.split('+').join(' ');
-  const [location, setLocation] = useState<string>('');
-  const [tournamentName, setTournamentName] = useState<string>('');
+  const [location, setLocation] = useState<string>('Nashville');
+  const [tournamentName, setTournamentName] = useState<string>('Test Tour');
 
   const sheetStyle = {
     minWidth: 400,
@@ -202,7 +202,8 @@ export const Intro = () => {
                   try {
                     setLoading(true);
                     const data = await searchByQuery(
-                      `${query} in ${location}`,
+                      query,
+                      location,
                       tournamentName
                     );
                     setScraped(data);
