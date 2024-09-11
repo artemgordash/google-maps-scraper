@@ -12,66 +12,72 @@ import { flattenObject } from '@/helpers/flatten-object';
 const parser = new XMLParser();
 
 async function getSitemap(webURL: string): Promise<string[]> {
-  const links = [];
-  const origin = new URL(webURL).origin;
-  const host = new URL(webURL).host.replace('www.', '');
-  const response = await fetch(origin + '/sitemap.xml');
-  const xml = await response.text();
-  links.push(
-    ...Object.values(flattenObject(parser.parse(xml))).filter(Boolean)
-  );
+  try {
+    const links = [];
+    const origin = new URL(webURL).origin;
+    const host = new URL(webURL).host.replace('www.', '');
+    const response = await fetch(origin + '/sitemap.xml', {
+      signal: AbortSignal.timeout(5000),
+    });
+    const xml = await response.text();
+    links.push(
+      ...Object.values(flattenObject(parser.parse(xml))).filter(Boolean)
+    );
 
-  const nextXMLLink = links.find(
-    (l) => typeof l === 'string' && l.includes('.xml')
-  );
+    const nextXMLLink = links.find(
+      (l) => typeof l === 'string' && l.includes('.xml')
+    );
 
-  if (nextXMLLink) {
-    const xmlLinks = links.filter((l) => {
-      if (typeof l === 'string') {
-        return l.endsWith('.xml');
+    if (nextXMLLink) {
+      const xmlLinks = links.filter((l) => {
+        if (typeof l === 'string') {
+          return l.endsWith('.xml');
+        }
+
+        return false;
+      }) as string[];
+
+      const xmlLinksResponse = await Promise.all(
+        xmlLinks.map(async (l) => {
+          try {
+            const response = await fetch(l);
+            const xml = await response.text();
+            return Object.values(flattenObject(parser.parse(xml)));
+          } catch (error) {
+            return '';
+          }
+        })
+      );
+
+      links.push(...xmlLinksResponse.flat());
+    }
+
+    return _.uniq(links).filter((l) => {
+      if (typeof l !== 'string') {
+        return false;
       }
 
-      return false;
+      if (l.length > 110) {
+        return false;
+      }
+
+      return (
+        l.includes(host) &&
+        !l.endsWith('.xml') &&
+        !l.endsWith('.jpg') &&
+        !l.endsWith('.png') &&
+        !l.endsWith('.jpeg') &&
+        !l.endsWith('.gif') &&
+        !l.endsWith('.svg') &&
+        !l.includes('.pdf') &&
+        !l.includes('.mp4') &&
+        !l.includes('.mp3') &&
+        !l.includes('.webp')
+      );
     }) as string[];
-
-    const xmlLinksResponse = await Promise.all(
-      xmlLinks.map(async (l) => {
-        try {
-          const response = await fetch(l);
-          const xml = await response.text();
-          return Object.values(flattenObject(parser.parse(xml)));
-        } catch (error) {
-          return '';
-        }
-      })
-    );
-
-    links.push(...xmlLinksResponse.flat());
+  } catch (error) {
+    return [];
   }
-
-  return _.uniq(links).filter((l) => {
-    if (typeof l !== 'string') {
-      return false;
-    }
-
-    if (l.length > 110) {
-      return false;
-    }
-
-    return (
-      l.includes(host) &&
-      !l.endsWith('.xml') &&
-      !l.endsWith('.jpg') &&
-      !l.endsWith('.png') &&
-      !l.endsWith('.jpeg') &&
-      !l.endsWith('.gif') &&
-      !l.endsWith('.svg') &&
-      !l.includes('.pdf') &&
-      !l.includes('.mp4') &&
-      !l.includes('.mp3') &&
-      !l.includes('.webp')
-    );
-  }) as string[];
 }
 
 const filterSocialMediaLinks = (link: string | undefined): boolean => {
