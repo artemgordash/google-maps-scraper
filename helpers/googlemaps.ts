@@ -349,7 +349,7 @@ async function scrapeDetails(page: Page, companyName: string) {
   })();
 
   const baseEntity = baseEnities?.[0];
-  const addresses = baseEnities?.map((el) => el?.[2]?.[0]);
+  const addresses = baseEnities?.map((el) => el?.[37]?.[0]?.[0]?.[17]?.[0]);
 
   const workingHours = (() => {
     try {
