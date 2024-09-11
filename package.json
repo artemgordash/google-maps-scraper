@@ -25,6 +25,7 @@
     "@mui/material": "^5.16.7",
     "@types/jsonpath": "^0.2.4",
     "@types/lodash": "^4.17.7",
+    "@types/xml2js": "^0.4.14",
     "@universe/address-parser": "^3.3.0",
     "addresser": "^1.1.20",
     "awesome-phonenumber": "^7.0.1",
@@ -35,6 +36,7 @@
     "deepdash-es": "^5.3.9",
     "dice-coefficient": "^2.1.1",
     "extract-email-address": "^3.0.2",
+    "fast-xml-parser": "^4.5.0",
     "fastest-levenshtein": "^1.0.16",
     "get-urls": "^12.1.0",
     "jsdom": "^25.0.0",
@@ -52,7 +54,8 @@
     "sitemapper": "^3.2.9",
     "tsx": "^4.19.0",
     "url-metadata": "^4.1.1",
-    "use-count-up": "^3.0.1"
+    "use-count-up": "^3.0.1",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@types/jsdom": "^21.1.7",

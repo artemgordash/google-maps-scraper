@@ -1,10 +1,78 @@
-import _, { initial } from 'lodash';
+import _ from 'lodash';
 import { connectTab } from '@/helpers/puppeteer';
 import { Page } from 'puppeteer-core/internal/index.js';
 import { distance } from 'fastest-levenshtein';
 import * as cheerio from 'cheerio';
 import { extractEmails } from '@/helpers/extract-emails';
-import { Email, Description } from '@mui/icons-material';
+import { Readability } from '@mozilla/readability';
+import { XMLParser } from 'fast-xml-parser';
+import { retry } from '@/helpers/retry';
+import { flattenObject } from '@/helpers/flatten-object';
+
+const parser = new XMLParser();
+
+async function getSitemap(webURL: string): Promise<string[]> {
+  const links = [];
+  const origin = new URL(webURL).origin;
+  const host = new URL(webURL).host.replace('www.', '');
+  const response = await fetch(origin + '/sitemap.xml');
+  const xml = await response.text();
+  links.push(
+    ...Object.values(flattenObject(parser.parse(xml))).filter(Boolean)
+  );
+
+  const nextXMLLink = links.find(
+    (l) => typeof l === 'string' && l.includes('.xml')
+  );
+
+  if (nextXMLLink) {
+    const xmlLinks = links.filter((l) => {
+      if (typeof l === 'string') {
+        return l.endsWith('.xml');
+      }
+
+      return false;
+    }) as string[];
+
+    const xmlLinksResponse = await Promise.all(
+      xmlLinks.map(async (l) => {
+        try {
+          const response = await fetch(l);
+          const xml = await response.text();
+          return Object.values(flattenObject(parser.parse(xml)));
+        } catch (error) {
+          return '';
+        }
+      })
+    );
+
+    links.push(...xmlLinksResponse.flat());
+  }
+
+  return _.uniq(links).filter((l) => {
+    if (typeof l !== 'string') {
+      return false;
+    }
+
+    if (l.length > 110) {
+      return false;
+    }
+
+    return (
+      l.includes(host) &&
+      !l.endsWith('.xml') &&
+      !l.endsWith('.jpg') &&
+      !l.endsWith('.png') &&
+      !l.endsWith('.jpeg') &&
+      !l.endsWith('.gif') &&
+      !l.endsWith('.svg') &&
+      !l.includes('.pdf') &&
+      !l.includes('.mp4') &&
+      !l.includes('.mp3') &&
+      !l.includes('.webp')
+    );
+  }) as string[];
+}
 
 const filterSocialMediaLinks = (link: string | undefined): boolean => {
   if (!link) return false;
@@ -25,7 +93,8 @@ const filterSocialMediaLinks = (link: string | undefined): boolean => {
     !link.includes('watch?') &&
     !link.includes('/videos/') &&
     !link.includes('/posts/') &&
-    !link.includes('photo.php')
+    !link.includes('photo.php') &&
+    !link.includes('/explore/')
   );
 };
 
@@ -37,7 +106,6 @@ async function getSocialMediaFromGoogle(companyName: string): Promise<{
   Linkedin: string;
   X: string;
   Tiktok: string;
-  Email: string;
 }> {
   const response = await fetch(
     `https://www.google.com/search?q=${companyName} Social Media`
@@ -56,6 +124,7 @@ async function getSocialMediaFromGoogle(companyName: string): Promise<{
       return params.keys().toArray().at(0);
     })
     .filter(filterSocialMediaLinks);
+
   const contacts = {};
 
   for (const link of links) {
@@ -71,69 +140,25 @@ async function getSocialMediaFromGoogle(companyName: string): Promise<{
   return { ...contacts };
 }
 
-async function getCompanyDescriptionFromWebsite(
-  companyName: string,
-  websiteUrl: string
-) {
+async function getCompanyDescriptionFromWebsite(aboutUsUrl: string) {
   try {
-    const hostname = new URL(websiteUrl).hostname;
-
-    const response = await fetch(
-      `https://www.bing.com/search?go=Search&q=about+story+${companyName}&search=&form=QBLH`
-    );
+    const response = await fetch(aboutUsUrl);
 
     const html = await response.text();
 
-    const $ = cheerio.load(html);
+    const dom = new DOMParser().parseFromString(html, 'text/html');
 
-    const searchResults = $('li.b_algo')
-      .toArray()
-      .map((card) => {
-        const cardElement = $(card);
+    const tags = [...dom.body.querySelectorAll('span, p')].map(
+      (e) => e.textContent?.trim() || ''
+    );
 
-        cardElement.remove('.algoSlug_icon');
+    const possibleDescriptions = tags.filter((e) => {
+      const clearedString = e.match(/[a-z]/g);
 
-        return {
-          description: cardElement
-            .find('div[role="contentinfo"]')
-            .text()
-            .slice(3, -1),
-          url: cardElement.find('a').attr('href'),
-        };
-      })
-      .filter((e) => {
-        try {
-          if (!e.url) return false;
-          return new URL(e.url).hostname === hostname;
-        } catch (error) {
-          return false;
-        }
-      });
+      return clearedString?.length && clearedString.length > 100;
+    });
 
-    if (!searchResults.length || !searchResults.at(0)?.description.length)
-      return null;
-
-    const websiteResponse = await fetch(searchResults?.at(0)?.url as string);
-
-    const websiteHtml = await websiteResponse.text();
-
-    const $website = cheerio.load(websiteHtml);
-    const description = $website(
-      $website('*')
-        .toArray()
-        .filter((e) =>
-          $website(e)
-            .text()
-            .includes(searchResults.at(0)?.description as string)
-        )
-        .at(-1)
-    ).text();
-
-    return description.includes(
-      searchResults.at(0)?.description.slice(0, -8) as string
-    )
-      ? description
-      : '';
+    return _.uniq(possibleDescriptions).slice(0, 2).join('\n');
   } catch (error) {
     return '';
   }
@@ -151,11 +176,32 @@ async function scrapeWebsite(url: string, companyName: string) {
     Tiktok: '',
   };
 
+  const sitemap = await getSitemap(url);
+  const Email: string[] = [];
+
   try {
     if (!url) throw new Error('No URL provided');
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
     const html = await response.text();
     const $ = await cheerio.load(html);
+    const interestingUrlsToFetch = [
+      ...sitemap.filter((u) => u.includes('about') || u.includes('contact')),
+      url,
+    ];
+    await Promise.all(
+      interestingUrlsToFetch.map(async (url) => {
+        try {
+          const response = await fetch(url, {
+            signal: AbortSignal.timeout(5000),
+          });
+          const html = await response.text();
+          const $ = await cheerio.load(html);
+
+          Email.push(...extractEmails($('body').html() ?? ''));
+        } catch (e) {}
+      })
+    );
+
     contacts.Instagram =
       $('a[href*="instagram.com"]')
         .toArray()
@@ -194,17 +240,14 @@ async function scrapeWebsite(url: string, companyName: string) {
         .map((e) => e.attribs.href)
         .filter(filterSocialMediaLinks)
         .at(0) || '';
-    contacts.Email = _.uniq(extractEmails($('body').html() || ''))
-      ?.slice(0, 2)
-      .map((e) => e.toLowerCase())
-      .join(', ');
   } catch (error) {}
 
+  contacts.Description = await getCompanyDescriptionFromWebsite(
+    sitemap.find((u) => u.includes('about')) || url
+  );
+
   if (url) {
-    const description = await getCompanyDescriptionFromWebsite(
-      companyName,
-      url
-    );
+    const description = await getCompanyDescriptionFromWebsite(url);
     console.log('🚀 ~ scrapeWebsite ~ description:', description);
     contacts.Description = description || '';
   }
@@ -225,6 +268,7 @@ async function scrapeWebsite(url: string, companyName: string) {
     }
   } catch (e) {}
 
+  contacts.Email = _.uniq(Email).slice(0, 3).join(', ');
   return {
     ...Object.fromEntries(
       Object.entries(contacts).map(([key, value]) => [
@@ -495,7 +539,6 @@ async function scrapeDetails(page: Page, companyName: string) {
   } catch (e) {
     console.log(e);
   }
-
   return results;
 }
 
@@ -539,9 +582,13 @@ export async function searchByQuery(
   const results = [];
   for (const linkData of links) {
     try {
-      await pageForList.goto(
-        `https://google.com/maps/search/"${linkData.company}" ${location}`,
-        { waitUntil: 'domcontentloaded' }
+      await retry(
+        async () =>
+          await pageForList.goto(
+            `https://google.com/maps/search/"${linkData.company}" ${location}`,
+            { waitUntil: 'domcontentloaded', timeout: 5000 }
+          ),
+        3
       );
       const response = await scrapeDetails(pageForList, linkData.company!);
       results.push(response);
@@ -575,9 +622,13 @@ export async function searchByCompanyName(
   const results = [];
 
   for (const company of companies) {
-    await pageForList.goto(
-      `https://google.com/maps/search/"${company}"+${location}`,
-      { waitUntil: 'domcontentloaded' }
+    await retry(
+      async () =>
+        await pageForList.goto(
+          `https://google.com/maps/search/"${company}"+${location}`,
+          { waitUntil: 'domcontentloaded', timeout: 5000 }
+        ),
+      3
     );
 
     const response = await scrapeDetails(pageForList, company);
