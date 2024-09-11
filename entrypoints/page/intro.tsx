@@ -22,8 +22,8 @@ export const Intro = () => {
   const [fileData, setFileData] = useState<any[]>([]);
   const [openModal, setOpenModal] = useState(false);
   const urlQuery = query.split('/').at(-3)?.split('+').join(' ');
-  const [location, setLocation] = useState<string>('Nashville');
-  const [tournamentName, setTournamentName] = useState<string>('Test Tour');
+  const [location, setLocation] = useState<string>('');
+  const [tournamentName, setTournamentName] = useState<string>('');
 
   const sheetStyle = {
     minWidth: 400,
@@ -36,6 +36,13 @@ export const Intro = () => {
     flexDirection: 'column',
     gap: 2,
   };
+
+  async function focusExtensionTab() {
+    const tabs = await browser.tabs.query({ title: 'Google Maps Scraper' });
+    if (tabs.length > 0) {
+      browser.tabs.update(tabs[0].id!, { active: true });
+    }
+  }
 
   const downloadCompaniesFile = async () => {
     const csvData = json2csv(
@@ -165,6 +172,7 @@ export const Intro = () => {
                 }
               } finally {
                 setLoading(false);
+                await focusExtensionTab();
               }
             }}
           >
@@ -216,6 +224,7 @@ export const Intro = () => {
                     }
                   } finally {
                     setLoading(false);
+                    await focusExtensionTab();
                   }
                 }}
               >
@@ -228,7 +237,7 @@ export const Intro = () => {
           <Button
             type={'file'}
             variant={'outlined'}
-            disabled={!location || !tournamentName || loading}
+            disabled={!location || !tournamentName || loading || !!query}
             // @ts-ignore
             onClick={() => fileInputRef!.current!.click()}
           >

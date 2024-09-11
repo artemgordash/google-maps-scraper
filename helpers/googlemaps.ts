@@ -40,7 +40,9 @@ async function getSitemap(webURL: string): Promise<string[]> {
       const xmlLinksResponse = await Promise.all(
         xmlLinks.map(async (l) => {
           try {
-            const response = await fetch(l);
+            const response = await fetch(l, {
+              signal: AbortSignal.timeout(5000),
+            });
             const xml = await response.text();
             return Object.values(flattenObject(parser.parse(xml)));
           } catch (error) {
@@ -114,7 +116,10 @@ async function getSocialMediaFromGoogle(companyName: string): Promise<{
   Tiktok: string;
 }> {
   const response = await fetch(
-    `https://www.google.com/search?q=${companyName} Social Media`
+    `https://www.google.com/search?q=${companyName} Social Media`,
+    {
+      signal: AbortSignal.timeout(5000),
+    }
   );
 
   const html = await response.text();
@@ -148,7 +153,9 @@ async function getSocialMediaFromGoogle(companyName: string): Promise<{
 
 async function getCompanyDescriptionFromWebsite(aboutUsUrl: string) {
   try {
-    const response = await fetch(aboutUsUrl);
+    const response = await fetch(aboutUsUrl, {
+      signal: AbortSignal.timeout(5000),
+    });
 
     const html = await response.text();
 
