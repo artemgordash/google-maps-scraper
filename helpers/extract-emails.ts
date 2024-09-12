@@ -1,5 +1,3 @@
-import { map } from 'lodash';
-
 export function extractEmails(text: string) {
   return (
     text
