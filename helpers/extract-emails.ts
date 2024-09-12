@@ -16,7 +16,8 @@ export function extractEmails(text: string) {
             !e.includes('.jpg') &&
             !e.includes('.jpeg') &&
             !e.includes('.gif') &&
-            !e.includes('.svg')
+            !e.includes('.svg') &&
+            !e.includes('+')
           );
         } catch (error) {
           return false;

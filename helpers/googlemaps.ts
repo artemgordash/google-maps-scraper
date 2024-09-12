@@ -4,12 +4,29 @@ import { Page } from 'puppeteer-core/internal/index.js';
 import { distance } from 'fastest-levenshtein';
 import * as cheerio from 'cheerio';
 import { extractEmails } from '@/helpers/extract-emails';
-import { Readability } from '@mozilla/readability';
 import { XMLParser } from 'fast-xml-parser';
 import { retry } from '@/helpers/retry';
 import { flattenObject } from '@/helpers/flatten-object';
+import { states } from '@/helpers/states';
 
 const parser = new XMLParser();
+
+async function getEmailsFromFacebook(facebookUrl: string) {
+  const response = await fetch(facebookUrl, {
+    headers: {
+      Accept:
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      Priority: 'u=0, i',
+      Pragma: 'no-cache',
+      'Cache-Control': 'no-cache',
+    },
+  });
+  const html = await response.text();
+
+  return extractEmails(html.replace(/\\u0040/g, '@'));
+}
 
 async function getSitemap(webURL: string): Promise<string[]> {
   try {
@@ -281,7 +298,20 @@ async function scrapeWebsite(url: string, companyName: string) {
     }
   } catch (e) {}
 
-  contacts.Email = _.uniq(Email).slice(0, 3).join(', ');
+  try {
+    if (contacts.Facebook?.length > 6) {
+      const emailsFromFacebook = await getEmailsFromFacebook(contacts.Facebook);
+      if (emailsFromFacebook.length) {
+        contacts.Email = _.uniq(emailsFromFacebook).slice(0, 3).join(', ');
+      } else {
+        contacts.Email = _.uniq(Email).slice(0, 3).join(', ');
+      }
+    }
+  } catch (e) {
+    console.log('Failed to get emails from facebook');
+    contacts.Email = _.uniq(Email).slice(0, 3).join(', ');
+  }
+
   return {
     ...Object.fromEntries(
       Object.entries(contacts).map(([key, value]) => [
@@ -399,7 +429,13 @@ async function scrapeDetails(page: Page, companyName: string) {
             return false;
           }
 
-          return distance(el?.[14]?.[11], companyName) <= 4;
+          return (
+            distance(
+              el?.[14]?.[11]?.toLowerCase(),
+              companyName.toLowerCase()
+            ) <= 4 ||
+            el?.[14]?.[11]?.toLowerCase().includes(companyName.toLowerCase())
+          );
         })
         .map((el: any) => el?.[14]);
     }
@@ -476,12 +512,9 @@ async function scrapeDetails(page: Page, companyName: string) {
     })(),
     'State/Province': (() => {
       try {
-        const state =
-          baseEntity?.[183]?.[2]?.[2]?.[0]?.split(', ').at(-2) ||
-          baseEntity?.[183]?.[1]?.[5];
+        const stateKey = baseEntity?.[166]?.split(', ').at(1);
 
-        console.log('🚀 ~ scrapeDetails ~ state:', state);
-        return state;
+        return states[stateKey];
       } catch (e) {
         return '';
       }
@@ -545,7 +578,7 @@ async function scrapeDetails(page: Page, companyName: string) {
   try {
     const contacts = await scrapeWebsite(
       results.Website,
-      `${results.Company} from ${results.City}`
+      `${results.Company} ${results.City}`
     );
     console.log('🚀 ~ scrapeDetails ~ contacts:', contacts);
     Object.assign(results, contacts);

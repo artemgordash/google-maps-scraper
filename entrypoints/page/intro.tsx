@@ -99,7 +99,7 @@ export const Intro = () => {
 
         if (!data.length) throw new Error('No data found');
 
-        setFileData(data);
+        setFileData(data.filter(Boolean));
         setOpenModal(true);
       } catch (error) {
         alert(

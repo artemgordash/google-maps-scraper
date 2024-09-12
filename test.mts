@@ -2,7 +2,6 @@ import * as cheerio from 'cheerio';
 // @ts-ignore d
 import lodash from 'lodash-es';
 import deepdash from 'deepdash-es';
-import { value } from 'jsonpath';
 const _ = deepdash(lodash);
 
 const testUrl1 =
@@ -17,9 +16,9 @@ const testUrl3 =
 const testUrl4 =
   'https://www.google.com/maps/place/Edo+Gastro+Tapas+%26+Wine/@36.1273259,-115.2267672,17z/data=!3m1!4b1!4m6!3m5!1s0x80c8c71182f68d91:0xe7bacb375f7667c5!8m2!3d36.1273216!4d-115.2241923!16s%2Fg%2F11f7pgwcwx?entry=ttu&g_ep=EgoyMDI0MDkwNC4wIKXMDSoASAFQAw%3D%3D';
 
-const response = await fetch(
-  'https://google.com/maps/search/Parlor Doughnuts las vegas'
-);
+const testUrl5 = 'https://google.com/maps/search/Parlor Doughnuts las vegas';
+
+const response = await fetch(testUrl1);
 
 const html = await response.text();
 
@@ -48,41 +47,64 @@ const initialData: any[] = JSON.parse(
 
 // console.dir(initialData, { depth: null });
 
-const result = _.eachDeep(initialData, (value, key, parent, context) => {
-  if (value?.includes && value.includes('Tennessee')) {
-    // console.log(value);
-    // console.log(context.path); // ['0.key.1'] или ['1.2.key.2']
+// const result = _.eachDeep(initialData, (value, key, parent, context) => {
+//   if (value?.includes && value.includes('Tennessee')) {
+//     console.log(value);
+//     console.log(context.path); // ['0.key.1'] или ['1.2.key.2']
+//   }
+//   if (value === 'Tennessee') {
+//     // console.log(context.path); // ['0.key.1'] или ['1.2.key.2']
+//   }
+// });
+
+export function flattenObject(ob: any) {
+  var toReturn = {};
+
+  for (var i in ob) {
+    if (!ob.hasOwnProperty(i)) continue;
+
+    if (typeof ob[i] == 'object' && ob[i] !== null) {
+      var flatObject = flattenObject(ob[i]);
+      for (var x in flatObject) {
+        if (!flatObject.hasOwnProperty(x)) continue;
+        // @ts-ignore
+        toReturn[i + '.' + x] = flatObject[x];
+      }
+    } else {
+      // @ts-ignore
+      toReturn[i] = ob[i];
+    }
   }
-  if (value === 'Tennessee') {
-    console.log(context.path); // ['0.key.1'] или ['1.2.key.2']
-  }
-});
+  return toReturn;
+}
 
-const workingHours = initialData[6][34][1].map((hours: [string, string]) => {
-  const [day, [interval]] = hours;
+console.log(flattenObject(initialData));
 
-  return [`Hours of Operation - ${day}`, interval];
-});
+// const workingHours = initialData[6][34][1].map((hours: [string, string]) => {
+//   const [day, [interval]] = hours;
 
-const entity = {
-  Company: initialData[6][11],
-  'First Name': initialData[6][11],
-  'Last Name': initialData[6][11],
-  Address: initialData[6][37][0][0][17][0],
-  Phone: initialData[6][178][0][1][0][0],
-  Website: (() => {
-    const website = initialData[6][7][0].replace('/url?q=', '');
-    if (!website) return '';
-    return website;
-  })(),
-  Speciality: `${initialData[6][13][0]}`,
-  Street: (() => {
-    return initialData[6][2][0];
-  })(),
-  City: initialData[6][183][1][3],
-  'State/Province': initialData[6][183][2][2][0].split(', ').at(-2),
-  'Zip/Postal Code': initialData[6][183][1][4],
-  ...(initialData[6][34][1][5] && Object.fromEntries(workingHours)),
-};
+//   return [`Hours of Operation - ${day}`, interval];
+// });
 
-console.log(entity);
+// const entity = {
+//   Company: initialData[6][11],
+//   'First Name': initialData[6][11],
+//   'Last Name': initialData[6][11],
+//   Address: initialData[6][37][0][0][17][0],
+//   Phone: initialData[6][178][0][1][0][0],
+//   Website: (() => {
+//     const website = initialData[6][7][0].replace('/url?q=', '');
+//     if (!website) return '';
+//     return website;
+//   })(),
+//   Speciality: `${initialData[6][13][0]}`,
+//   Street: (() => {
+//     return initialData[6][2][0];
+//   })(),
+//   City: initialData[6][183][1][3],
+//   'State/Province': initialData[6][183][2][2][0].split(' ').at(-2).replace(',', ''),
+//   'Zip/Postal Code': initialData[6][183][1][4],
+//   ...(initialData[6][34][1][5] && Object.fromEntries(workingHours)),
+// };
+
+// console.log(entity);

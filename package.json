@@ -25,6 +25,7 @@
     "@types/xml2js": "^0.4.14",
     "@universe/address-parser": "^3.3.0",
     "addresser": "^1.1.20",
+    "addressit": "^1.8.2",
     "axios": "^1.7.5",
     "change-case": "^5.4.4",
     "cheerio": "^1.0.0",
