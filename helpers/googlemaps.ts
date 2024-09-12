@@ -178,8 +178,10 @@ async function getCompanyDescriptionFromWebsite(aboutUsUrl: string) {
 
     const dom = new DOMParser().parseFromString(html, 'text/html');
 
+    [...dom.querySelectorAll('script')].forEach((e) => e.remove());
+
     const tags = [...dom.body.querySelectorAll('span, p')].map(
-      (e) => e.textContent?.trim() || ''
+      (e: any) => e.innerText?.trim() || ''
     );
 
     const possibleDescriptions = tags.filter((e) => {
@@ -216,7 +218,6 @@ async function scrapeWebsite(url: string, companyName: string) {
     const $ = await cheerio.load(html);
     const interestingUrlsToFetch = [
       ...sitemap.filter((u) => u.includes('about') || u.includes('contact')),
-      url,
     ];
     await Promise.all(
       interestingUrlsToFetch.map(async (url) => {
@@ -231,6 +232,8 @@ async function scrapeWebsite(url: string, companyName: string) {
         } catch (e) {}
       })
     );
+
+    Email.push(...extractEmails($('body').html() || ''));
 
     contacts.Instagram =
       $('a[href*="instagram.com"]')
@@ -272,15 +275,10 @@ async function scrapeWebsite(url: string, companyName: string) {
         .at(0) || '';
   } catch (error) {}
 
-  contacts.Description = await getCompanyDescriptionFromWebsite(
-    sitemap.find((u) => u.includes('about')) || url
-  );
-
-  if (url) {
-    const description = await getCompanyDescriptionFromWebsite(url);
-    console.log('🚀 ~ scrapeWebsite ~ description:', description);
-    contacts.Description = description || '';
-  }
+  contacts.Description =
+    (await getCompanyDescriptionFromWebsite(
+      sitemap.find((u) => u.includes('about')) || url
+    )) || '';
 
   try {
     if (!contacts.Instagram || !contacts.Facebook) {
