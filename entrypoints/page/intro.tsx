@@ -20,7 +20,8 @@ export const Intro = () => {
   const [scraped, setScraped] = useState<any[]>([]);
   const [filename, setFilename] = useState('');
   const [fileData, setFileData] = useState<any[]>([]);
-  const [openModal, setOpenModal] = useState(false);
+  const [openModalForList, setOpenModalForList] = useState(false);
+  const [openModalForOne, setOpenModalForOne] = useState(false);
   const urlQuery = query.split('/').at(-3)?.split('+').join(' ');
   const [location, setLocation] = useState<string>('');
   const [tournamentName, setTournamentName] = useState<string>('');
@@ -66,7 +67,7 @@ export const Intro = () => {
     setFileData([]);
     setQuery('');
     setFilename('');
-    setOpenModal(false);
+    setOpenModalForList(false);
     setLocation('');
     setTournamentName('');
   };
@@ -100,7 +101,7 @@ export const Intro = () => {
         if (!data.length) throw new Error('No data found');
 
         setFileData(data.filter(Boolean));
-        setOpenModal(true);
+        setOpenModalForList(true);
       } catch (error) {
         alert(
           'Failed to read the file, ensure the file is a text file and companies are separated by new lines'
@@ -125,8 +126,8 @@ export const Intro = () => {
     >
       <Modal
         sx={{ minWidth: 1000 }}
-        onClose={() => setOpenModal(false)}
-        open={openModal}
+        onClose={() => setOpenModalForList(false)}
+        open={openModalForList}
       >
         <ModalDialog>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
@@ -157,7 +158,7 @@ export const Intro = () => {
             onClick={async () => {
               try {
                 setLoading(true);
-                setOpenModal(false);
+                setOpenModalForList(false);
                 const data = await searchByCompanyName(
                   fileData,
                   location,
@@ -177,6 +178,61 @@ export const Intro = () => {
             }}
           >
             {loading ? <CircularProgress /> : 'scrape them all'}
+          </Button>
+        </ModalDialog>
+      </Modal>
+      <Modal
+        sx={{ minWidth: 1000 }}
+        onClose={() => setOpenModalForOne(false)}
+        open={openModalForOne}
+      >
+        <ModalDialog>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Typography>{tournamentName}</Typography>
+            <Typography>{location}</Typography>
+          </Box>
+          <Box
+            sx={{
+              minWidth: 550,
+              mt: 2,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+            }}
+          >
+            <ModalClose />
+            <Input
+              onChange={(e) => setFileData([e.target.value])}
+              value={fileData?.[0] || ''}
+              placeholder={'Company name'}
+              sx={{ width: 'auto', mt: 2 }}
+            />
+          </Box>
+          <Button
+            sx={{ mt: 3 }}
+            disabled={!location && !fileData?.[0]}
+            onClick={async () => {
+              try {
+                setLoading(true);
+                setOpenModalForOne(false);
+                const data = await searchByCompanyName(
+                  fileData,
+                  location,
+                  tournamentName
+                );
+                setScraped(data);
+                await showFinishNotification();
+              } catch (error) {
+                console.log('🚀 ~ onClick={ ~ error:', error);
+                if (error instanceof Error) {
+                  await showErrorNotification(error.message);
+                }
+              } finally {
+                setLoading(false);
+                await focusExtensionTab();
+              }
+            }}
+          >
+            {loading ? <CircularProgress /> : 'scrape this one'}
           </Button>
         </ModalDialog>
       </Modal>
@@ -242,6 +298,17 @@ export const Intro = () => {
             onClick={() => fileInputRef!.current!.click()}
           >
             Get businesses from a text file
+          </Button>
+        )}
+        {!scraped.length && (
+          <Button
+            type={'file'}
+            variant={'outlined'}
+            disabled={!location || !tournamentName || loading || !!query}
+            // @ts-ignore
+            onClick={() => setOpenModalForOne(true)}
+          >
+            Get one business
           </Button>
         )}
         {!!scraped.length && (
